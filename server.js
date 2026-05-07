@@ -198,6 +198,54 @@ app.get('/', async (request, response) => {
   }
 });
 
+app.post('/search/title', async (request, response) => {
+  try {
+    const searchText = request.body.titleQuery.trim();
+    const authors = await articlesCollection.distinct('authors');
+    const allAuthorsSorted = authors.flat().filter((value, index, self) => self.indexOf(value) === index).sort();
+
+    if (!searchText) {
+      const pageHtml = renderPage('<div class="no-data">Введите текст для поиска.</div>', allAuthorsSorted);
+      return response.send(pageHtml);
+    }
+
+    const searchResults = await articlesCollection.find({
+      title: { $regex: searchText, $options: 'i' }
+    }).sort({ publishDate: -1 }).toArray();
+
+    const tableContent = renderArticlesTable(searchResults);
+    const pageHtml = renderPage(tableContent, allAuthorsSorted);
+    response.send(pageHtml);
+  } catch (error) {
+    console.error('Ошибка при поиске по названию:', error);
+    response.status(500).send('Внутренняя ошибка сервера.');
+  }
+});
+
+app.post('/search/author', async (request, response) => {
+  try {
+    const selectedAuthor = request.body.authorQuery.trim();
+    const authors = await articlesCollection.distinct('authors');
+    const allAuthorsSorted = authors.flat().filter((value, index, self) => self.indexOf(value) === index).sort();
+
+    if (!selectedAuthor) {
+      const pageHtml = renderPage('<div class="no-data">Пожалуйста, выберите автора из списка.</div>', allAuthorsSorted);
+      return response.send(pageHtml);
+    }
+
+    const authorArticles = await articlesCollection.find({
+      authors: selectedAuthor
+    }).sort({ publishDate: -1 }).toArray();
+
+    const tableContent = renderArticlesTable(authorArticles);
+    const pageHtml = renderPage(tableContent, allAuthorsSorted, selectedAuthor);
+    response.send(pageHtml);
+  } catch (error) {
+    console.error('Ошибка при поиске по автору:', error);
+    response.status(500).send('Внутренняя ошибка сервера.');
+  }
+});
+
 app.listen(port, async () => {
   await connectToDatabase();
   console.log(`Сервер запущен на http://localhost:${port}`);
