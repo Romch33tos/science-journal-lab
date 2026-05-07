@@ -147,6 +147,42 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
 </html>`;
 }
 
+function renderArticlesTable(articlesData) {
+  if (!articlesData || articlesData.length === 0) {
+    return '<div class="no-data">Нет статей для отображения.</div>';
+  }
+
+  let tableHtml = `
+    <table>
+      <thead>
+        <tr>
+          <th>№</th>
+          <th>Название</th>
+          <th>Авторы</th>
+          <th>Дата размещения</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  articlesData.forEach((article, index) => {
+    const formattedDate = article.publishDate.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    tableHtml += `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${article.title}</td>
+          <td>${article.authors.join(', ')}</td>
+          <td>${formattedDate}</td>
+        </tr>`;
+  });
+
+  tableHtml += '</tbody></table>';
+  return tableHtml;
+}
+
 app.listen(port, async () => {
   await connectToDatabase();
   console.log(`Сервер запущен на http://localhost:${port}`);
