@@ -25,6 +25,128 @@ async function connectToDatabase() {
   }
 }
 
+function renderPage(content = '', options = [], selectedAuthor = '') {
+  const optionsHtml = options.map(option =>
+    `<option value="${option}" ${option === selectedAuthor ? 'selected' : ''}>${option}</option>`
+  ).join('');
+
+  return `
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Электронный научный журнал</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f7fa;
+      color: #333;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #eee;
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    input[type="text"], select {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .btn-list {
+      background-color: #27ae60;
+    }
+    .btn-list:hover {
+      background-color: #219a52;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 12px;
+      text-align: left;
+    }
+    th {
+      background-color: #f8f9fa;
+      font-weight: bold;
+    }
+    tr:nth-child(even) {
+      background-color: #f2f2f2;
+    }
+    .no-data {
+      text-align: center;
+      padding: 30px;
+      color: #7f8c8d;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Научный журнал</h1>
+    <div class="controls">
+      <form action="/" method="GET" class="control-group">
+        <button type="submit" class="btn-list">Список статей</button>
+      </form>
+      <form action="/search/title" method="POST" class="control-group">
+        <input type="text" name="titleQuery" placeholder="Введите текст для поиска..." required>
+        <button type="submit">Поиск по названию</button>
+      </form>
+      <form action="/search/author" method="POST" class="control-group">
+        <select name="authorQuery">
+          <option value="">-- Выберите автора --</option>
+          ${optionsHtml}
+        </select>
+        <button type="submit">Поиск по автору</button>
+      </form>
+    </div>
+    <div class="content">
+      ${content}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 app.listen(port, async () => {
   await connectToDatabase();
   console.log(`Сервер запущен на http://localhost:${port}`);
