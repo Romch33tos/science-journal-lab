@@ -183,6 +183,21 @@ function renderArticlesTable(articlesData) {
   return tableHtml;
 }
 
+app.get('/', async (request, response) => {
+  try {
+    const allArticles = await articlesCollection.find().sort({ publishDate: -1 }).toArray();
+    const authors = await articlesCollection.distinct('authors');
+    const allAuthorsSorted = authors.flat().filter((value, index, self) => self.indexOf(value) === index).sort();
+
+    const tableContent = renderArticlesTable(allArticles);
+    const pageHtml = renderPage(tableContent, allAuthorsSorted);
+    response.send(pageHtml);
+  } catch (error) {
+    console.error('Ошибка при получении списка статей:', error);
+    response.status(500).send('Внутренняя ошибка сервера.');
+  }
+});
+
 app.listen(port, async () => {
   await connectToDatabase();
   console.log(`Сервер запущен на http://localhost:${port}`);
