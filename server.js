@@ -80,11 +80,15 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       align-items: center;
       gap: 8px;
     }
-    input[type="text"], select {
+    input[type="text"], input[type="date"], select, textarea {
       padding: 8px 12px;
       border: 1px solid #ccc;
       border-radius: 4px;
       font-size: 14px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 100px;
     }
     button {
       padding: 8px 16px;
@@ -117,6 +121,12 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
     }
     .btn-delete:hover {
       background-color: #c0392b;
+    }
+    .btn-create {
+      background-color: #2ecc71;
+    }
+    .btn-create:hover {
+      background-color: #27ae60;
     }
     table {
       width: 100%;
@@ -168,6 +178,14 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       display: flex;
       gap: 8px;
     }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -176,6 +194,9 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
     <div class="controls">
       <form action="/" method="GET" class="control-group">
         <button type="submit" class="btn-list">Список статей</button>
+      </form>
+      <form action="/create/page" method="GET" class="control-group">
+        <button type="submit" class="btn-create">+ Создать статью</button>
       </form>
       <form action="/search/title" method="POST" class="control-group">
         <input type="text" name="titleQuery" placeholder="Введите текст для поиска..." required>
@@ -297,6 +318,37 @@ function renderFullArticlePage(article) {
   return renderPage(content);
 }
 
+function renderCreateArticleForm() {
+  const content = `
+    <h2>Создание новой статьи</h2>
+    <form action="/create" method="POST">
+      <div class="form-group">
+        <label>Название статьи *</label>
+        <input type="text" name="title" required style="width: 100%;">
+      </div>
+      <div class="form-group">
+        <label>Авторы (через запятую) *</label>
+        <input type="text" name="authors" required style="width: 100%;" placeholder="Иванов И.И., Петров П.П.">
+      </div>
+      <div class="form-group">
+        <label>Дата публикации *</label>
+        <input type="date" name="publishDate" required>
+      </div>
+      <div class="form-group">
+        <label>Содержание статьи *</label>
+        <textarea name="content" required style="width: 100%;"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Теги (через запятую)</label>
+        <input type="text" name="tags" style="width: 100%;" placeholder="наука, технология, исследования">
+      </div>
+      <button type="submit">Опубликовать статью</button>
+      <a href="/" class="back-link" style="margin-left: 20px;">Отмена</a>
+    </form>
+  `;
+  return renderPage(content);
+}
+
 app.get('/', async (request, response) => {
   try {
     const allArticles = await articlesCollection.find().sort({ publishDate: -1 }).toArray();
@@ -309,6 +361,36 @@ app.get('/', async (request, response) => {
   } catch (error) {
     console.error('Ошибка при получении списка статей:', error);
     response.status(500).send('Внутренняя ошибка сервера.');
+  }
+});
+
+app.get('/create/page', async (request, response) => {
+  const pageHtml = renderCreateArticleForm();
+  response.send(pageHtml);
+});
+
+app.post('/create', async (request, response) => {
+  try {
+    const { title, authors, publishDate, content, tags } = request.body;
+    
+    const authorsArray = authors.split(',').map(a => a.trim());
+    const tagsArray = tags ? tags.split(',').map(t => t.trim()) : [];
+    
+    const newArticle = {
+      title,
+      authors: authorsArray,
+      publishDate: new Date(publishDate),
+      content,
+      tags: tagsArray,
+      reviews: []
+    };
+    
+    const result = await articlesCollection.insertOne(newArticle);
+    console.log(`Статья "${title}" успешно создана с ID: ${result.insertedId}`);
+    response.redirect('/');
+  } catch (error) {
+    console.error('Ошибка при создании статьи:', error);
+    response.status(500).send('Ошибка при создании статьи.');
   }
 });
 
