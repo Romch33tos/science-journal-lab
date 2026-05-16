@@ -1,28 +1,38 @@
 const express = require('express');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
+const path = require('path');
 
 const app = express();
-const port = 3000;
+const PORT = 3000;
 
-const mongoUri = 'mongodb://127.0.0.1:27017';
-const dbName = 'science_journal';
+const MONGO_URI = 'mongodb://127.0.0.1:27017';
+const DB_NAME = 'science_journal';
 
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 let db;
 let articlesCollection;
 
 async function connectToDatabase() {
   try {
-    const client = new MongoClient(mongoUri);
+    const client = new MongoClient(MONGO_URI);
     await client.connect();
     console.log('Сервер успешно подключился к MongoDB.');
-    db = client.db(dbName);
+    db = client.db(DB_NAME);
     articlesCollection = db.collection('articles');
   } catch (error) {
     console.error('Ошибка подключения к базе данных:', error);
     process.exit(1);
   }
+}
+
+function calculateAverageRating(article) {
+  if (!article.reviews || article.reviews.length === 0) {
+    return 0;
+  }
+  const sum = article.reviews.reduce((total, review) => total + review.rating, 0);
+  return sum / article.reviews.length;
 }
 
 function renderPage(content = '', options = [], selectedAuthor = '') {
@@ -46,7 +56,7 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       color: #333;
     }
     .container {
-      max-width: 960px;
+      max-width: 1200px;
       margin: 0 auto;
       background-color: #fff;
       padding: 30px;
@@ -95,6 +105,11 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
     .btn-list:hover {
       background-color: #219a52;
     }
+    .btn-view {
+      background-color: #3498db;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -117,6 +132,33 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       padding: 30px;
       color: #7f8c8d;
       font-style: italic;
+    }
+    .article-card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: #fafafa;
+    }
+    .review {
+      border-left: 3px solid #3498db;
+      padding: 10px;
+      margin: 10px 0;
+      background-color: #f8f9fa;
+    }
+    .rating {
+      color: #f39c12;
+      font-weight: bold;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 20px;
+      text-decoration: none;
+      color: #3498db;
+    }
+    .icon-group {
+      display: flex;
+      gap: 8px;
     }
   </style>
 </head>
@@ -147,7 +189,7 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
 </html>`;
 }
 
-function renderArticlesTable(articlesData) {
+function renderArticlesTableWithViewButton(articlesData) {
   if (!articlesData || articlesData.length === 0) {
     return '<div class="no-data">Нет статей для отображения.</div>';
   }
@@ -160,22 +202,35 @@ function renderArticlesTable(articlesData) {
           <th>Название</th>
           <th>Авторы</th>
           <th>Дата размещения</th>
+          <th>Рейтинг</th>
+          <th>Действия</th>
         </tr>
       </thead>
       <tbody>`;
 
   articlesData.forEach((article, index) => {
-    const formattedDate = article.publishDate.toLocaleDateString('ru-RU', {
+    const formattedDate = article.publishDate ? article.publishDate.toLocaleDateString('ru-RU', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
-    });
+    }) : 'Дата не указана';
+    
+    const avgRating = calculateAverageRating(article);
+    const ratingDisplay = avgRating > 0 ? `⭐ ${avgRating.toFixed(1)}` : 'Нет оценок';
+    const reviewsCount = article.reviews ? article.reviews.length : 0;
+    
     tableHtml += `
         <tr>
           <td>${index + 1}</td>
           <td>${article.title}</td>
           <td>${article.authors.join(', ')}</td>
           <td>${formattedDate}</td>
+          <td>${ratingDisplay} (${reviewsCount} отз.)</td>
+          <td class="icon-group">
+            <form action="/article/${article._id}" method="GET" style="display: inline;">
+              <button type="submit" class="btn-view" title="Просмотр статьи">📖 Просмотр</button>
+            </form>
+          </td>
         </tr>`;
   });
 
@@ -183,17 +238,82 @@ function renderArticlesTable(articlesData) {
   return tableHtml;
 }
 
+function renderFullArticlePage(article) {
+  if (!article) {
+    return '<div class="no-data">Статья не найдена.</div>';
+  }
+
+  const formattedDate = article.publishDate ? article.publishDate.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }) : 'Дата не указана';
+
+  const avgRating = calculateAverageRating(article);
+  
+  let reviewsHtml = '';
+  if (article.reviews && article.reviews.length > 0) {
+    reviewsHtml = '<h3>Рецензии:</h3>';
+    article.reviews.forEach((review, idx) => {
+      const reviewDate = review.date ? review.date.toLocaleDateString('ru-RU') : 'Дата не указана';
+      reviewsHtml += `
+        <div class="review">
+          <strong>${review.username}</strong> 
+          <span class="rating">⭐ ${review.rating}/10</span>
+          <small>(${reviewDate})</small>
+          <p>${review.text}</p>
+        </div>
+      `;
+    });
+  } else {
+    reviewsHtml = '<p><em>Нет рецензий на эту статью.</em></p>';
+  }
+
+  const content = `
+    <div class="article-card">
+      <h2>${article.title}</h2>
+      <p><strong>Авторы:</strong> ${article.authors.join(', ')}</p>
+      <p><strong>Дата публикации:</strong> ${formattedDate}</p>
+      <p><strong>Средний рейтинг:</strong> <span class="rating">${avgRating > 0 ? '⭐ ' + avgRating.toFixed(1) + '/10' : 'Нет оценок'}</span></p>
+      <p><strong>Теги:</strong> ${article.tags ? article.tags.join(', ') : 'Нет тегов'}</p>
+      <h3>Содержание:</h3>
+      <p>${article.content}</p>
+      ${reviewsHtml}
+      <a href="/" class="back-link">← Вернуться к списку статей</a>
+    </div>
+  `;
+
+  return renderPage(content);
+}
+
 app.get('/', async (request, response) => {
   try {
     const allArticles = await articlesCollection.find().sort({ publishDate: -1 }).toArray();
     const authors = await articlesCollection.distinct('authors');
     const allAuthorsSorted = authors.flat().filter((value, index, self) => self.indexOf(value) === index).sort();
-
-    const tableContent = renderArticlesTable(allArticles);
+    
+    const tableContent = renderArticlesTableWithViewButton(allArticles);
     const pageHtml = renderPage(tableContent, allAuthorsSorted);
     response.send(pageHtml);
   } catch (error) {
     console.error('Ошибка при получении списка статей:', error);
+    response.status(500).send('Внутренняя ошибка сервера.');
+  }
+});
+
+app.get('/article/:id', async (request, response) => {
+  try {
+    const id = request.params.id;
+    const article = await articlesCollection.findOne({ _id: new ObjectId(id) });
+    
+    if (!article) {
+      return response.status(404).send('<div class="container"><h1>Статья не найдена</h1><a href="/">Вернуться</a></div>');
+    }
+    
+    const pageHtml = renderFullArticlePage(article);
+    response.send(pageHtml);
+  } catch (error) {
+    console.error('Ошибка при получении статьи:', error);
     response.status(500).send('Внутренняя ошибка сервера.');
   }
 });
@@ -213,7 +333,7 @@ app.post('/search/title', async (request, response) => {
       title: { $regex: searchText, $options: 'i' }
     }).sort({ publishDate: -1 }).toArray();
 
-    const tableContent = renderArticlesTable(searchResults);
+    const tableContent = renderArticlesTableWithViewButton(searchResults);
     const pageHtml = renderPage(tableContent, allAuthorsSorted);
     response.send(pageHtml);
   } catch (error) {
@@ -237,7 +357,7 @@ app.post('/search/author', async (request, response) => {
       authors: selectedAuthor
     }).sort({ publishDate: -1 }).toArray();
 
-    const tableContent = renderArticlesTable(authorArticles);
+    const tableContent = renderArticlesTableWithViewButton(authorArticles);
     const pageHtml = renderPage(tableContent, allAuthorsSorted, selectedAuthor);
     response.send(pageHtml);
   } catch (error) {
@@ -246,7 +366,7 @@ app.post('/search/author', async (request, response) => {
   }
 });
 
-app.listen(port, async () => {
+app.listen(PORT, async () => {
   await connectToDatabase();
-  console.log(`Сервер запущен на http://localhost:${port}`);
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
