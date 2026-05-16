@@ -109,6 +109,12 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
     .btn-list:hover {
       background-color: #219a52;
     }
+    .btn-top {
+      background-color: #e67e22;
+    }
+    .btn-top:hover {
+      background-color: #d35400;
+    }
     .btn-view {
       background-color: #3498db;
       padding: 4px 8px;
@@ -198,6 +204,9 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       <form action="/create/page" method="GET" class="control-group">
         <button type="submit" class="btn-create">+ Создать статью</button>
       </form>
+      <form action="/top-articles" method="GET" class="control-group">
+        <button type="submit" class="btn-top">⭐ Топ статей</button>
+      </form>
       <form action="/search/title" method="POST" class="control-group">
         <input type="text" name="titleQuery" placeholder="Введите текст для поиска..." required>
         <button type="submit">Поиск по названию</button>
@@ -262,8 +271,8 @@ function renderArticlesTableWithActions(articlesData) {
             <form action="/article/${article._id}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Вы уверены, что хотите удалить эту статью?');">
               <button type="submit" class="btn-delete" title="Удалить статью">🗑 Удалить</button>
             </form>
-          </td>
-        </tr>`;
+           </td>
+         </tr>`;
   });
 
   tableHtml += '</tbody></table>';
@@ -349,6 +358,50 @@ function renderCreateArticleForm() {
   return renderPage(content);
 }
 
+function renderTopArticlesPage(articles) {
+  if (!articles || articles.length === 0) {
+    return renderPage('<div class="no-data">Нет статей для отображения.</div>');
+  }
+
+  let tableHtml = `
+    <h2>⭐ Топ статей по рейтингу</h2>
+    <p><em>Отображаются статьи с самым высоким рейтингом. При равенстве рейтинга учитывается количество комментариев.</em></p>
+    <table>
+      <thead>
+        <tr>
+          <th>№</th>
+          <th>Название</th>
+          <th>Авторы</th>
+          <th>Рейтинг</th>
+          <th>Количество комментариев</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  articles.forEach((article, index) => {
+    const avgRating = calculateAverageRating(article);
+    const reviewsCount = article.reviews ? article.reviews.length : 0;
+    
+    tableHtml += `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${article.title}</td>
+          <td>${article.authors.join(', ')}</td>
+          <td class="rating">⭐ ${avgRating.toFixed(1)}/10</td>
+          <td>${reviewsCount}</td>
+          <td>
+            <form action="/article/${article._id}" method="GET" style="display: inline;">
+              <button type="submit" class="btn-view">📖 Просмотр</button>
+            </form>
+           </td>
+         </tr>`;
+  });
+
+  tableHtml += '</tbody></table><a href="/" class="back-link">← Вернуться к списку статей</a>';
+  return renderPage(tableHtml);
+}
+
 app.get('/', async (request, response) => {
   try {
     const allArticles = await articlesCollection.find().sort({ publishDate: -1 }).toArray();
@@ -360,6 +413,31 @@ app.get('/', async (request, response) => {
     response.send(pageHtml);
   } catch (error) {
     console.error('Ошибка при получении списка статей:', error);
+    response.status(500).send('Внутренняя ошибка сервера.');
+  }
+});
+
+app.get('/top-articles', async (request, response) => {
+  try {
+    const allArticles = await articlesCollection.find().toArray();
+    
+    const sortedArticles = allArticles.sort((a, b) => {
+      const ratingA = calculateAverageRating(a);
+      const ratingB = calculateAverageRating(b);
+      
+      if (ratingB !== ratingA) {
+        return ratingB - ratingA;
+      }
+      
+      const reviewsCountA = a.reviews ? a.reviews.length : 0;
+      const reviewsCountB = b.reviews ? b.reviews.length : 0;
+      return reviewsCountB - reviewsCountA;
+    });
+    
+    const pageHtml = renderTopArticlesPage(sortedArticles);
+    response.send(pageHtml);
+  } catch (error) {
+    console.error('Ошибка при получении топ-статей:', error);
     response.status(500).send('Внутренняя ошибка сервера.');
   }
 });
