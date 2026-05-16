@@ -110,6 +110,14 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       padding: 4px 8px;
       font-size: 12px;
     }
+    .btn-delete {
+      background-color: #e74c3c;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    .btn-delete:hover {
+      background-color: #c0392b;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -189,7 +197,7 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
 </html>`;
 }
 
-function renderArticlesTableWithViewButton(articlesData) {
+function renderArticlesTableWithActions(articlesData) {
   if (!articlesData || articlesData.length === 0) {
     return '<div class="no-data">Нет статей для отображения.</div>';
   }
@@ -229,6 +237,9 @@ function renderArticlesTableWithViewButton(articlesData) {
           <td class="icon-group">
             <form action="/article/${article._id}" method="GET" style="display: inline;">
               <button type="submit" class="btn-view" title="Просмотр статьи">📖 Просмотр</button>
+            </form>
+            <form action="/article/${article._id}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Вы уверены, что хотите удалить эту статью?');">
+              <button type="submit" class="btn-delete" title="Удалить статью">🗑 Удалить</button>
             </form>
           </td>
         </tr>`;
@@ -292,7 +303,7 @@ app.get('/', async (request, response) => {
     const authors = await articlesCollection.distinct('authors');
     const allAuthorsSorted = authors.flat().filter((value, index, self) => self.indexOf(value) === index).sort();
     
-    const tableContent = renderArticlesTableWithViewButton(allArticles);
+    const tableContent = renderArticlesTableWithActions(allArticles);
     const pageHtml = renderPage(tableContent, allAuthorsSorted);
     response.send(pageHtml);
   } catch (error) {
@@ -318,6 +329,24 @@ app.get('/article/:id', async (request, response) => {
   }
 });
 
+app.post('/article/:id/delete', async (request, response) => {
+  try {
+    const id = request.params.id;
+    const result = await articlesCollection.deleteOne({ _id: new ObjectId(id) });
+    
+    if (result.deletedCount === 1) {
+      console.log(`Статья с ID ${id} успешно удалена.`);
+    } else {
+      console.log(`Статья с ID ${id} не найдена.`);
+    }
+    
+    response.redirect('/');
+  } catch (error) {
+    console.error('Ошибка при удалении статьи:', error);
+    response.status(500).send('Ошибка при удалении статьи.');
+  }
+});
+
 app.post('/search/title', async (request, response) => {
   try {
     const searchText = request.body.titleQuery.trim();
@@ -333,7 +362,7 @@ app.post('/search/title', async (request, response) => {
       title: { $regex: searchText, $options: 'i' }
     }).sort({ publishDate: -1 }).toArray();
 
-    const tableContent = renderArticlesTableWithViewButton(searchResults);
+    const tableContent = renderArticlesTableWithActions(searchResults);
     const pageHtml = renderPage(tableContent, allAuthorsSorted);
     response.send(pageHtml);
   } catch (error) {
@@ -357,7 +386,7 @@ app.post('/search/author', async (request, response) => {
       authors: selectedAuthor
     }).sort({ publishDate: -1 }).toArray();
 
-    const tableContent = renderArticlesTableWithViewButton(authorArticles);
+    const tableContent = renderArticlesTableWithActions(authorArticles);
     const pageHtml = renderPage(tableContent, allAuthorsSorted, selectedAuthor);
     response.send(pageHtml);
   } catch (error) {
