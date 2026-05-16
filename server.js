@@ -80,6 +80,11 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
       align-items: center;
       gap: 8px;
     }
+    .control-group-column {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     input[type="text"], input[type="date"], select, textarea {
       padding: 8px 12px;
       border: 1px solid #ccc;
@@ -219,6 +224,17 @@ function renderPage(content = '', options = [], selectedAuthor = '') {
         <button type="submit">Поиск по автору</button>
       </form>
     </div>
+    <div class="controls">
+      <form action="/search/date-range" method="POST" class="control-group-column">
+        <div class="control-group">
+          <label>Дата начала:</label>
+          <input type="date" name="startDate" required>
+          <label>Дата окончания:</label>
+          <input type="date" name="endDate" required>
+          <button type="submit">🔍 Поиск по дате</button>
+        </div>
+      </form>
+    </div>
     <div class="content">
       ${content}
     </div>
@@ -271,8 +287,8 @@ function renderArticlesTableWithActions(articlesData) {
             <form action="/article/${article._id}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Вы уверены, что хотите удалить эту статью?');">
               <button type="submit" class="btn-delete" title="Удалить статью">🗑 Удалить</button>
             </form>
-           </td>
-         </tr>`;
+          </td>
+        </tr>`;
   });
 
   tableHtml += '</tbody></table>';
@@ -366,7 +382,7 @@ function renderTopArticlesPage(articles) {
   let tableHtml = `
     <h2>⭐ Топ статей по рейтингу</h2>
     <p><em>Отображаются статьи с самым высоким рейтингом. При равенстве рейтинга учитывается количество комментариев.</em></p>
-    <table>
+    </table>
       <thead>
         <tr>
           <th>№</th>
@@ -395,7 +411,7 @@ function renderTopArticlesPage(articles) {
               <button type="submit" class="btn-view">📖 Просмотр</button>
             </form>
            </td>
-         </tr>`;
+        </tr>`;
   });
 
   tableHtml += '</tbody></table><a href="/" class="back-link">← Вернуться к списку статей</a>';
@@ -504,6 +520,41 @@ app.post('/article/:id/delete', async (request, response) => {
   } catch (error) {
     console.error('Ошибка при удалении статьи:', error);
     response.status(500).send('Ошибка при удалении статьи.');
+  }
+});
+
+app.post('/search/date-range', async (request, response) => {
+  try {
+    const { startDate, endDate } = request.body;
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    
+    const results = await articlesCollection.find({
+      publishDate: { $gte: start, $lte: end }
+    }).sort({ publishDate: -1 }).toArray();
+    
+    const authors = await articlesCollection.distinct('authors');
+    const allAuthorsSorted = authors.flat().filter((value, index, self) => self.indexOf(value) === index).sort();
+    
+    let content;
+    if (results.length === 0) {
+      content = `<div class="no-data">Нет статей, опубликованных в период с ${startDate} по ${endDate}.</div>`;
+    } else {
+      content = `
+        <div class="no-data" style="background: #e8f4fd; margin-bottom: 15px;">
+          Найдено статей: ${results.length} (период: ${startDate} - ${endDate})
+        </div>
+        ${renderArticlesTableWithActions(results)}
+      `;
+    }
+    
+    const pageHtml = renderPage(content, allAuthorsSorted);
+    response.send(pageHtml);
+  } catch (error) {
+    console.error('Ошибка при поиске по датам:', error);
+    response.status(500).send('Внутренняя ошибка сервера.');
   }
 });
 
